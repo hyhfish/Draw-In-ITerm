@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "draw-in-iterm"
+version = "0.1.0"
+description = "Terminal whiteboard that draws while holding the left mouse button"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+authors = [{ name = "Augment Agent" }]
+keywords = ["terminal", "curses", "whiteboard", "mouse", "tui"]
+dependencies = []
+
+[project.optional-dependencies]
+pixel = ["pillow>=10.0.0"]
+
+
+[project.urls]
+Homepage = "https://github.com/hyfish/Draw-In-ITerm"
+
+[project.scripts]
+dit = "draw_in_iterm:run"
+
+[tool.setuptools]
+# We ship a single module at src/draw_in_iterm.py
+py-modules = ["draw_in_iterm"]
+package-dir = {"" = "src"}
+

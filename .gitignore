@@ -1,0 +1,96 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+wheelhouse/
+wheels/
+*.egg
+*.egg-info/
+.eggs/
+MANIFEST
+pip-wheel-metadata/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Type checkers
+.mypy_cache/
+.pytype/
+.dmypy.json
+
+dmypy.json
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Environments
+.env
+.env.*
+.venv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# PEP 582
+__pypackages__/
+
+# Django/Flask/etc. (generic cache & local settings)
+*.log
+logs/
+instance/
+
+# Tooling
+.nox/
+.tox/
+.ropeproject
+
+# IDEs/Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local data/artifacts
+*.bak
+*.tmp
+*.temp
+
+# Project-specific
+# Keep these generic; adjust if you decide to track certain artifacts
+src/*.egg-info/
+
