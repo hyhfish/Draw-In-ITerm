@@ -140,28 +140,29 @@ class BrailleCanvas:
                 max(0, mx * 2 + 1))
 
     def draw_line(self, hy0: int, hx0: int, hy1: int, hx1: int, thickness: int = 0) -> None:
-        # Bresenham on high-res grid
-        dy = abs(hy1 - hy0)
-        dx = abs(hx1 - hx0)
-        sy = 1 if hy0 < hy1 else -1
-        sx = 1 if hx0 < hx1 else -1
-        err = dx - dy
-        y, x = hy0, hx0
-        while True:
-            # stamp thickness (diamond metric for speed)
-            for ty in range(-thickness, thickness + 1):
-                rem = thickness - abs(ty)
-                for tx in range(-rem, rem + 1):
-                    self._mark_dot(y + ty, x + tx)
-            if y == hy1 and x == hx1:
-                break
-            e2 = 2 * err
-            if e2 > -dy:
-                err -= dy
-                x += sx
-            if e2 < dx:
-                err += dx
-                y += sy
+        """Smoother stroke on the 2x4 braille microdot grid.
+        - Use circular stamping (euclidean) instead of diamond to reduce angular corners.
+        - Oversample along the segment to avoid visible steps on diagonals.
+        Control oversampling via env DIT_BRAILLE_OS (default: 3).
+        """
+        r = max(0, thickness)
+        oversample = max(1, int(os.getenv("DIT_BRAILLE_OS", "3")))
+        steps = max(1, max(abs(hy1 - hy0), abs(hx1 - hx0)) * oversample)
+        dy = hy1 - hy0
+        dx = hx1 - hx0
+        rr2 = r * r
+        for i in range(steps + 1):
+            t = i / steps
+            y = int(round(hy0 + dy * t))
+            x = int(round(hx0 + dx * t))
+            # circular stamp around (y, x)
+            if r == 0:
+                self._mark_dot(y, x)
+            else:
+                for ty in range(-r, r + 1):
+                    for tx in range(-r, r + 1):
+                        if tx * tx + ty * ty <= rr2:
+                            self._mark_dot(y + ty, x + tx)
 
     def commit(self, stdscr: "curses._CursesWindow", force: bool = False) -> None:
         for (cy, cx) in list(self.dirty):
