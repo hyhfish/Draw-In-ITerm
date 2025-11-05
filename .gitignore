@@ -93,4 +93,4 @@ Thumbs.db
 # Project-specific
 # Keep these generic; adjust if you decide to track certain artifacts
 src/*.egg-info/
-
+/.qoder/
