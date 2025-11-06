@@ -551,6 +551,17 @@ def _main(stdscr) -> None:
                     render()
                     continue
 
+                # If we were drawing but now receive a movement with no button1 press/move,
+                # it likely means the button was released outside the terminal.
+                if drawing and not pressed and not moved and not clicked:
+                    if stroke_pts:
+                        strokes.append((list(stroke_pts), brush, color_idx))
+                    drawing = False
+                    stroke_pts.clear()
+                    seg_cursor = 0
+                    render()
+                    continue
+
                 if (pressed or clicked) and not drawing:
                     # Start a new stroke only on the first press/click; do not reset on subsequent move events
                     _enable_mouse_reporting()  # reassert tracking modes
@@ -608,6 +619,17 @@ def _main(stdscr) -> None:
                         brush = min(8, max(1, brush + wheel_delta))
                         render()
                         continue
+                    render()
+                    continue
+
+                # If drawing but current event is not left button (e.g., motion with no button),
+                # likely the release happened outside. Finalize.
+                if drawing and (not left) and (not wheel):
+                    if stroke_pts:
+                        strokes.append((list(stroke_pts), brush, color_idx))
+                    drawing = False
+                    stroke_pts.clear()
+                    seg_cursor = 0
                     render()
                     continue
 
