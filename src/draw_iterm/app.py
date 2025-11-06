@@ -6,6 +6,7 @@ import sys
 import time
 import re
 import os
+import signal
 from typing import List, Tuple
 
 from .braille import BrailleCanvas
@@ -138,11 +139,17 @@ def run() -> None:
 def _main(stdscr) -> None:
     curses.curs_set(0)
     curses.noecho()
-    curses.cbreak()
+    curses.raw()
     stdscr.nodelay(True)  # non-blocking getch
     stdscr.keypad(True)
     curses.start_color()
     curses.use_default_colors()
+    # Avoid OS job-control suspending the app on Ctrl+Z; we handle it as Undo
+    try:
+        signal.signal(signal.SIGTSTP, signal.SIG_IGN)
+    except Exception:
+        pass
+
 
     _enable_mouse_reporting()
 
@@ -167,6 +174,8 @@ def _main(stdscr) -> None:
     debug_line = ""
     brush = 2  # subpixel thickness (Chebyshev radius = brush-1)
     seg_cursor = 0  # first segment start index not yet emitted
+    strokes: List[Tuple[List[Tuple[float, float]], int]] = []  # history of (points, thickness)
+
 
     def to_sub(x: int, y: int) -> Tuple[float, float]:
         # Map cell coords (x,y) to subgrid centered coords
@@ -190,6 +199,16 @@ def _main(stdscr) -> None:
             b = stroke_pts[-1]
             canvas.draw_polyline_subgrid([a, b], thickness=brush)
 
+    def _redraw_from_history() -> None:
+        canvas.clear()
+        for pts, th in strokes:
+            if not pts:
+                continue
+            if len(pts) <= 2:
+                dense = pts
+            else:
+                dense = catmull_rom_centripetal(pts, samples_per_cell=6.0)
+            canvas.draw_polyline_subgrid(dense, thickness=th)
 
     def render():
         # Draw current canvas
@@ -197,7 +216,7 @@ def _main(stdscr) -> None:
         canvas.render_to_curses(stdscr)
         # Optional: hint line
         hint = (
-            f"draw: drag to draw  |  c: clear  |  q: quit  |  s: save png  |  S: save to dir  |  mouse:{mouse_hint}  |  d: debug {'on' if debug_mode else 'off'}  |  "
+            f"draw: drag to draw  |  c: clear  |  q: quit  |  s: save png  |  S: save to dir  |  Ctrl+Z: undo  |  mouse:{mouse_hint}  |  d: debug {'on' if debug_mode else 'off'}  |  "
             f"Shift+Wheel: brush={brush}"
         )
         try:
@@ -224,11 +243,24 @@ def _main(stdscr) -> None:
                 render()
                 continue
 
-            if ch == ord("q") or ch == ord("Q"):
+            # Ctrl+Z: undo last stroke (or cancel current stroke)
+            if ch in (26, getattr(curses, "KEY_SUSPEND", -1)):
+                if drawing:
+                    drawing = False
+                    stroke_pts.clear()
+                    seg_cursor = 0
+                elif strokes:
+                    strokes.pop()
+                _redraw_from_history()
+                render()
+                continue
+
+            if ch == ord("q") or ch == ord("Q") or ch == 3:
                 break
 
             if ch == ord("c") or ch == ord("C"):
                 canvas.clear()
+                strokes.clear()
                 stroke_pts.clear()
                 seg_cursor = 0
                 render()
@@ -376,6 +408,9 @@ def _main(stdscr) -> None:
                         dense = catmull_rom_centripetal(stroke_pts, samples_per_cell=6.0)
                         canvas.draw_polyline_subgrid(dense, thickness=brush)
                         render()
+                    # Finalize current stroke into history
+                    if stroke_pts:
+                        strokes.append((list(stroke_pts), brush))
                     drawing = False
                     stroke_pts.clear()
                     seg_cursor = 0
@@ -429,6 +464,9 @@ def _main(stdscr) -> None:
                         dense = catmull_rom_centripetal(stroke_pts, samples_per_cell=6.0)
                         canvas.draw_polyline_subgrid(dense, thickness=brush)
                         render()
+                    # Finalize current stroke into history
+                    if stroke_pts:
+                        strokes.append((list(stroke_pts), brush))
                     drawing = False
                     stroke_pts.clear()
                     seg_cursor = 0

@@ -10,6 +10,7 @@ A pure-terminal whiteboard for macOS + iTerm2. Draw smooth curves with your mous
 - Shift + mouse wheel: adjust brush thickness
 - Press `s`: export PNG to current directory
 - Press `S`: export PNG to a chosen directory (supports `~` and env vars)
+- Press `Ctrl+Z`: undo last stroke
 - Press `d`: toggle debug info
 - Press `c`: clear
 - Press `q`: quit
@@ -53,6 +54,7 @@ From repo root:
 - Shift + Wheel: adjust brush thickness (1–8)
 - s: save PNG to current directory
 - S: save PNG to a chosen directory (enter a path; empty = current directory)
+- Ctrl+Z: undo last stroke
 - d: toggle debug overlay
 - c: clear canvas
 - q: quit
