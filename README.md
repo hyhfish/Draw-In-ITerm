@@ -64,6 +64,9 @@ From repo root:
 - Default filename: `draw_YYYYmmdd_HHMMSS.png`
 - Default scale: 3× (per subpixel). Saved to current directory for `s`, or to your chosen directory for `S`
 - The `S` prompt accepts `~` and environment variables; the target directory must already exist
+- Configure default save directory via env var `DRAW_ITERM_SAVE_DIR` (e.g., `export DRAW_ITERM_SAVE_DIR="$HOME/Pictures/Draw-In-ITerm"`)
+- If the env var is not set, the last directory chosen via `S` is remembered in `~/.config/draw_iterm/config.json`
+
 
 ## Tips
 - Works best in iTerm2 with mouse reporting; the app enables necessary modes automatically

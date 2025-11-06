@@ -7,6 +7,8 @@ import time
 import re
 import os
 import signal
+import json
+
 from typing import List, Tuple
 
 from .braille import BrailleCanvas
@@ -174,6 +176,52 @@ def _main(stdscr) -> None:
     debug_line = ""
     brush = 2  # subpixel thickness (Chebyshev radius = brush-1)
     seg_cursor = 0  # first segment start index not yet emitted
+
+    # Default save directory config
+    CONFIG_DIR = os.path.join(os.path.expanduser(os.environ.get("XDG_CONFIG_HOME", "~/.config")), "draw_iterm")
+    CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+
+    def _load_default_save_dir():
+        # 1) Environment variable override
+        env_val = os.environ.get("DRAW_ITERM_SAVE_DIR", "").strip()
+        if env_val:
+            p = os.path.expandvars(os.path.expanduser(env_val))
+            try:
+                os.makedirs(p, exist_ok=True)
+                return p
+            except Exception:
+                pass
+        # 2) Config file
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            d = (data or {}).get("default_save_dir", "")
+            if isinstance(d, str) and d.strip():
+                p = os.path.expandvars(os.path.expanduser(d.strip()))
+                try:
+                    os.makedirs(p, exist_ok=True)
+                    return p
+                except Exception:
+                    return None
+        except Exception:
+            pass
+        return None
+
+    def _remember_default_save_dir(path: str) -> None:
+        if not path:
+            return
+        # If env var is set, do not override user's explicit override
+        if os.environ.get("DRAW_ITERM_SAVE_DIR", "").strip():
+            return
+        try:
+            os.makedirs(CONFIG_DIR, exist_ok=True)
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump({"default_save_dir": os.path.expandvars(os.path.expanduser(path))}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    default_save_dir = _load_default_save_dir()
+
     strokes: List[Tuple[List[Tuple[float, float]], int]] = []  # history of (points, thickness)
 
 
@@ -271,14 +319,20 @@ def _main(stdscr) -> None:
                 render()
                 continue
 
-            # Save current canvas to PNG in current directory
+            # Save current canvas to PNG (default dir if configured)
             if ch == ord("s"):
                 ts = time.strftime("%Y%m%d_%H%M%S")
-                path = f"draw_{ts}.png"
+                base = default_save_dir or "."
+                try:
+                    os.makedirs(base, exist_ok=True)
+                except Exception:
+                    base = "."
+                filename = f"draw_{ts}.png"
+                path = os.path.join(base, filename)
                 scale = 3
                 try:
                     canvas.export_png(path, scale=scale)
-                    debug_line = f"Saved {path} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
+                    debug_line = f"Saved {os.path.abspath(path)} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
                 except Exception as e:
                     debug_line = f"Save failed: {e}"
                 render()
@@ -337,7 +391,10 @@ def _main(stdscr) -> None:
                 scale = 3
                 try:
                     canvas.export_png(path, scale=scale)
-                    debug_line = f"Saved {path} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
+                    debug_line = f"Saved {os.path.abspath(path)} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
+                    # Remember this directory as default (unless overridden by env var)
+                    default_save_dir = dirpath
+                    _remember_default_save_dir(dirpath)
                 except Exception as e:
                     debug_line = f"Save failed: {e}"
                 render()

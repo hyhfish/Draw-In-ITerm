@@ -61,6 +61,9 @@
 - 默认文件名：`draw_YYYYmmdd_HHMMSS.png`
 - 默认缩放：每子像素 3×。按 `s` 保存到当前目录；按 `S` 保存到你选择的目录
 - `S` 的输入提示支持 `~` 和环境变量；目标目录需已存在
+- 可通过环境变量配置默认保存目录：`DRAW_ITERM_SAVE_DIR`（例如：`export DRAW_ITERM_SAVE_DIR="$HOME/Pictures/Draw-In-ITerm"`）
+- 若未设置该环境变量，按 `S` 选择的目录会被记住，保存在 `~/.config/draw_iterm/config.json`
+
 
 ## 提示
 - 最佳体验是在 iTerm2 下使用鼠标上报；应用会自动启用所需模式
