@@ -166,18 +166,10 @@ def _main(stdscr) -> None:
     debug_line = ""
     brush = 2  # subpixel thickness (Chebyshev radius = brush-1)
     seg_cursor = 0  # first segment start index not yet emitted
-    zoom = 1.0  # logical zoom factor (preview; affects mapping only)
 
     def to_sub(x: int, y: int) -> Tuple[float, float]:
-        # Map cell coords (x,y) to subgrid centered coords, with logical zoom
-        sx = x * 2 + 1
-        sy = y * 4 + 2
-        if zoom != 1.0:
-            cx = (canvas.width * 2) / 2.0
-            cy = (canvas.height * 4) / 2.0
-            sx = cx + (sx - cx) / zoom
-            sy = cy + (sy - cy) / zoom
-        return sx, sy
+        # Map cell coords (x,y) to subgrid centered coords
+        return x * 2 + 1, y * 4 + 2
 
     def _emit_new_segments() -> None:
         nonlocal seg_cursor
@@ -205,7 +197,7 @@ def _main(stdscr) -> None:
         # Optional: hint line
         hint = (
             f"draw: drag to draw  |  c: clear  |  q: quit  |  mouse:{mouse_hint}  |  d: debug {'on' if debug_mode else 'off'}  |  "
-            f"Shift+Wheel: brush={brush}  |  Ctrl+Wheel: zoom={zoom:.1f}"
+            f"Shift+Wheel: brush={brush}"
         )
         try:
             stdscr.addstr(0, 0, hint[: max(0, width - 1)])
@@ -266,20 +258,15 @@ def _main(stdscr) -> None:
                 wheel_down = bool(bstate & getattr(curses, "BUTTON5_PRESSED", 0))
                 wheel = wheel_up or wheel_down
                 shift_mod = bool(bstate & getattr(curses, "BUTTON_SHIFT", 0))
-                ctrl_mod  = bool(bstate & getattr(curses, "BUTTON_CTRL", 0))
                 delta = (1 if wheel_down else (-1 if wheel_up else 0))
 
                 # Debug overlay
-                debug_line = f"KEY_MOUSE x={mx} y={my} b=0x{bstate:x} p={int(pressed)} r={int(released)} c={int(clicked)} mv={int(moved)} mo={int(motion)} wh={int(wheel)} sh={int(shift_mod)} ct={int(ctrl_mod)}"
+                debug_line = f"KEY_MOUSE x={mx} y={my} b=0x{bstate:x} p={int(pressed)} r={int(released)} c={int(clicked)} mv={int(moved)} mo={int(motion)} wh={int(wheel)} sh={int(shift_mod)}"
 
                 if wheel:
-                    # Shift+Wheel -> brush  |  Ctrl+Wheel -> zoom
+                    # Shift+Wheel -> brush；其它滚轮忽略
                     if shift_mod and delta != 0:
                         brush = min(8, max(1, brush + delta))
-                        render()
-                        continue
-                    if ctrl_mod and delta != 0:
-                        zoom = min(4.0, max(0.5, zoom + 0.1 * delta))
                         render()
                         continue
                     # Other wheel events: ignore for drawing; just refresh
@@ -328,20 +315,16 @@ def _main(stdscr) -> None:
                     debug_line = "ESC (unknown mouse seq)"
                     render()
                     continue
-                mx, my, left, up, motion, wheel, wheel_delta, shift_mod, ctrl_mod = ev
+                mx, my, left, up, motion, wheel, wheel_delta, shift_mod, _ = ev
                 # Clamp
                 my = max(0, min(my, canvas.height - 1))
                 mx = max(0, min(mx, canvas.width - 1))
 
-                debug_line = f"RAW x={mx} y={my} left={int(left)} up={int(up)} mo={int(motion)} wh={int(wheel)} sh={int(shift_mod)} ct={int(ctrl_mod)}"
+                debug_line = f"RAW x={mx} y={my} left={int(left)} up={int(up)} mo={int(motion)} wh={int(wheel)} sh={int(shift_mod)}"
 
                 if wheel:
                     if shift_mod and wheel_delta != 0:
                         brush = min(8, max(1, brush + wheel_delta))
-                        render()
-                        continue
-                    if ctrl_mod and wheel_delta != 0:
-                        zoom = min(4.0, max(0.5, zoom + 0.1 * wheel_delta))
                         render()
                         continue
                     render()
