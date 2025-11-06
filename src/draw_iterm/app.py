@@ -5,6 +5,7 @@ import locale
 import sys
 import time
 import re
+import os
 from typing import List, Tuple
 
 from .braille import BrailleCanvas
@@ -196,7 +197,7 @@ def _main(stdscr) -> None:
         canvas.render_to_curses(stdscr)
         # Optional: hint line
         hint = (
-            f"draw: drag to draw  |  c: clear  |  q: quit  |  mouse:{mouse_hint}  |  d: debug {'on' if debug_mode else 'off'}  |  "
+            f"draw: drag to draw  |  c: clear  |  q: quit  |  s: save png  |  S: save to dir  |  mouse:{mouse_hint}  |  d: debug {'on' if debug_mode else 'off'}  |  "
             f"Shift+Wheel: brush={brush}"
         )
         try:
@@ -235,6 +236,78 @@ def _main(stdscr) -> None:
 
             if ch == ord("d") or ch == ord("D"):
                 debug_mode = not debug_mode
+                render()
+                continue
+
+            # Save current canvas to PNG in current directory
+            if ch == ord("s"):
+                ts = time.strftime("%Y%m%d_%H%M%S")
+                path = f"draw_{ts}.png"
+                scale = 3
+                try:
+                    canvas.export_png(path, scale=scale)
+                    debug_line = f"Saved {path} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
+                except Exception as e:
+                    debug_line = f"Save failed: {e}"
+                render()
+                continue
+
+            # Save to user-chosen directory (uppercase S)
+            if ch == ord("S"):
+                # Prompt for directory path (empty = current directory)
+                prompt = "Save directory (empty = current): "
+                row = min(2, canvas.height - 1)
+                dir_in = ""
+                # Temporarily disable mouse reporting so mouse events won't pollute input
+                try:
+                    _disable_mouse_reporting()
+                    try:
+                        curses.mousemask(0)
+                    except Exception:
+                        pass
+                    try:
+                        curses.flushinp()
+                    except Exception:
+                        pass
+
+                    stdscr.nodelay(False)
+                    curses.echo()
+                    curses.curs_set(1)
+                    try:
+                        stdscr.move(row, 0)
+                        stdscr.clrtoeol()
+                        stdscr.addstr(row, 0, prompt)
+                        stdscr.refresh()
+                        b = stdscr.getstr(row, len(prompt), 512)
+                        dir_in = b.decode(sys.getfilesystemencoding() or "utf-8").strip()
+                    finally:
+                        curses.noecho()
+                        curses.curs_set(0)
+                        stdscr.nodelay(True)
+                finally:
+                    # Restore mouse reporting
+                    try:
+                        curses.mousemask(curses.ALL_MOUSE_EVENTS | _pos_flag)
+                    except Exception:
+                        pass
+                    _enable_mouse_reporting()
+
+                dirpath = dir_in or "."
+                # Expand ~ and env vars
+                dirpath = os.path.expandvars(os.path.expanduser(dirpath))
+                if not os.path.isdir(dirpath):
+                    debug_line = f"Save failed: not a directory: {dirpath}"
+                    render()
+                    continue
+
+                ts = time.strftime("%Y%m%d_%H%M%S")
+                path = os.path.join(dirpath, f"draw_{ts}.png")
+                scale = 3
+                try:
+                    canvas.export_png(path, scale=scale)
+                    debug_line = f"Saved {path} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
+                except Exception as e:
+                    debug_line = f"Save failed: {e}"
                 render()
                 continue
 

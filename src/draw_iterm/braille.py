@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import List, Tuple
+import struct
+import zlib
+
 
 # Mapping of (subrow, subcol) within a braille cell (4x2) to dot bit index
 # Unicode braille dots numbering:
@@ -137,3 +140,59 @@ class BrailleCanvas:
                 # Ignore any addstr errors on edge cases (should be rare after slicing)
                 pass
 
+    def export_png(self, path: str, scale: int = 2) -> None:
+        """Export current canvas to a grayscale PNG at subpixel resolution.
+
+        - path: output file path ending with .png
+        - scale: integer scale factor applied to each subpixel (>=1)
+        """
+        if scale < 1:
+            scale = 1
+        sw, sh = self.sub_width, self.sub_height
+        out_w, out_h = sw * scale, sh * scale
+
+        # Build raw scanlines with PNG filter type 0 (None)
+        raw = bytearray()
+        bg = 255  # white background
+        fg = 0    # black stroke
+        for sy in range(sh):
+            # One logical subpixel row, horizontally scaled
+            row = bytearray(out_w)
+            dst = 0
+            for sx in range(sw):
+                cell_x = sx // 2
+                cell_y = sy // 4
+                subcol = sx % 2
+                subrow = sy % 4
+                mask = DOT_BIT[(subrow, subcol)]
+                on = (self._grid[cell_y][cell_x] & mask) != 0
+                val = fg if on else bg
+                # write horizontally scaled copies
+                for _ in range(scale):
+                    row[dst] = val
+                    dst += 1
+            # write vertically scaled copies with filter byte 0
+            for _ in range(scale):
+                raw.append(0)  # filter type None
+                raw.extend(row)
+
+        def _chunk(typ: bytes, data: bytes) -> bytes:
+            length = struct.pack("!I", len(data))
+            crc = zlib.crc32(typ)
+            crc = zlib.crc32(data, crc) & 0xFFFFFFFF
+            return length + typ + data + struct.pack("!I", crc)
+
+        # PNG signature
+        sig = b"\x89PNG\r\n\x1a\n"
+        # IHDR
+        ihdr = struct.pack("!IIBBBBB", out_w, out_h, 8, 0, 0, 0, 0)
+        # IDAT
+        comp = zlib.compress(bytes(raw), level=9)
+        # IEND
+        iend = b""
+
+        with open(path, "wb") as f:
+            f.write(sig)
+            f.write(_chunk(b"IHDR", ihdr))
+            f.write(_chunk(b"IDAT", comp))
+            f.write(_chunk(b"IEND", iend))
