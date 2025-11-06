@@ -8,6 +8,7 @@ A pure-terminal whiteboard for macOS + iTerm2. Draw smooth curves with your mous
 - Start with a global command: `draw`
 - Draw smooth curves by mouse drag
 - Shift + mouse wheel: adjust brush thickness
+- Per-stroke colors: press number keys 1–8 to choose color (black/red/green/yellow/blue/magenta/cyan/white)
 - Press `s`: export PNG to current directory
 - Press `S`: export PNG to a chosen directory (supports `~` and env vars)
 - Press `Ctrl+Z`: undo last stroke
@@ -52,6 +53,7 @@ From repo root:
 ## Hotkeys
 - Mouse drag: draw
 - Shift + Wheel: adjust brush thickness (1–8)
+- 1–8: choose brush color (black/red/green/yellow/blue/magenta/cyan/white)
 - s: save PNG to current directory
 - S: save PNG to a chosen directory (enter a path; empty = current directory)
 - Ctrl+Z: undo last stroke
@@ -64,8 +66,14 @@ From repo root:
 - Default filename: `draw_YYYYmmdd_HHMMSS.png`
 - Default scale: 3× (per subpixel). Saved to current directory for `s`, or to your chosen directory for `S`
 - The `S` prompt accepts `~` and environment variables; the target directory must already exist
+- Per-stroke colors are preserved in the exported PNG (RGB)
 - Configure default save directory via env var `DRAW_ITERM_SAVE_DIR` (e.g., `export DRAW_ITERM_SAVE_DIR="$HOME/Pictures/Draw-In-ITerm"`)
 - If the env var is not set, the last directory chosen via `S` is remembered in `~/.config/draw_iterm/config.json`
+- Optional: invert black/white on export for visibility on white backgrounds.
+  - Enable via env: `DRAW_ITERM_EXPORT_INVERT_BW=1` (or add `export DRAW_ITERM_EXPORT_INVERT_BW=1` to your shell rc)
+  - Or in config file `~/.config/draw_iterm/config.json`: `{ "export_invert_bw": true }`
+  - Effect: only during PNG export, black↔white are swapped; other colors unchanged; terminal rendering is unaffected
+
 
 
 ## Tips

@@ -146,6 +146,25 @@ def _main(stdscr) -> None:
     stdscr.keypad(True)
     curses.start_color()
     curses.use_default_colors()
+    # Initialize 8 basic color pairs for strokes
+    COLOR_IDS = [
+        curses.COLOR_BLACK,
+        curses.COLOR_RED,
+        curses.COLOR_GREEN,
+        curses.COLOR_YELLOW,
+        curses.COLOR_BLUE,
+        curses.COLOR_MAGENTA,
+        curses.COLOR_CYAN,
+        curses.COLOR_WHITE,
+    ]
+    PAIRS = []
+    try:
+        for i, cid in enumerate(COLOR_IDS, start=1):
+            curses.init_pair(i, cid, -1)
+            PAIRS.append(curses.color_pair(i))
+    except Exception:
+        PAIRS = [0] * 8
+
     # Avoid OS job-control suspending the app on Ctrl+Z; we handle it as Undo
     try:
         signal.signal(signal.SIGTSTP, signal.SIG_IGN)
@@ -176,6 +195,7 @@ def _main(stdscr) -> None:
     debug_line = ""
     brush = 2  # subpixel thickness (Chebyshev radius = brush-1)
     seg_cursor = 0  # first segment start index not yet emitted
+    color_idx = 0  # current brush color (0..7)
 
     # Default save directory config
     CONFIG_DIR = os.path.join(os.path.expanduser(os.environ.get("XDG_CONFIG_HOME", "~/.config")), "draw_iterm")
@@ -220,9 +240,94 @@ def _main(stdscr) -> None:
         except Exception:
             pass
 
-    default_save_dir = _load_default_save_dir()
+    # Default brush color helpers
+    def _parse_color_index(val) -> int | None:
+        try:
+            s = str(val).strip().lower()
+        except Exception:
+            return None
+        if not s:
+            return None
+        names = ["black","red","green","yellow","blue","magenta","cyan","white"]
+        if s.isdigit():
+            i = int(s)
+            return i if 0 <= i <= 7 else None
+        if s in names:
+            return names.index(s)
+        return None
 
-    strokes: List[Tuple[List[Tuple[float, float]], int]] = []  # history of (points, thickness)
+    def _detect_dark_bg_from_env() -> bool | None:
+        # Heuristic using COLORFGBG (if provided by terminal)
+        s = os.environ.get("COLORFGBG", "")
+        if not s:
+            return None
+        parts = [p for p in re.split(r"[:;]", s) if p.strip().isdigit()]
+        if not parts:
+            return None
+        try:
+            bg = int(parts[-1])  # last component is background
+        except Exception:
+            return None
+        return True if bg <= 7 else False
+
+    def _load_default_color() -> int:
+        # 1) Env var override
+        idx = _parse_color_index(os.environ.get("DRAW_ITERM_DEFAULT_COLOR", ""))
+        if idx is not None:
+            return idx
+        # 2) Config file
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            idx = _parse_color_index((data or {}).get("default_color", ""))
+            if idx is not None:
+                return idx
+        except Exception:
+            pass
+        # 3) Heuristic: dark bg -> white, light bg -> black
+        dark = _detect_dark_bg_from_env()
+        if dark is True:
+            return 7  # white
+        if dark is False:
+            return 0  # black
+        # 4) Fallback: white (safer on dark terminals)
+        return 7
+    def _parse_bool(val) -> bool | None:
+        try:
+            s = str(val).strip().lower()
+        except Exception:
+            return None
+        if s in ("1","true","yes","on"): return True
+        if s in ("0","false","no","off"): return False
+        return None
+
+    def _load_export_invert_bw() -> bool:
+        b = _parse_bool(os.environ.get("DRAW_ITERM_EXPORT_INVERT_BW", ""))
+        if b is not None:
+            return b
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            v = data.get("export_invert_bw", None)
+            if isinstance(v, bool):
+                return v
+            # allow string truthy/falsy too
+            b2 = _parse_bool(v)
+            if b2 is not None:
+                return b2
+        except Exception:
+            pass
+        return False
+
+
+    default_save_dir = _load_default_save_dir()
+    # Initialize brush color with env/config/heuristic
+    color_idx = _load_default_color()
+
+    export_invert_bw = _load_export_invert_bw()
+
+
+    strokes: List[Tuple[List[Tuple[float, float]], int, int]] = []  # history of (points, thickness, color_idx)
 
 
     def to_sub(x: int, y: int) -> Tuple[float, float]:
@@ -237,7 +342,7 @@ def _main(stdscr) -> None:
         while seg_cursor + 3 < len(stroke_pts):
             p0, p1, p2, p3 = stroke_pts[seg_cursor], stroke_pts[seg_cursor + 1], stroke_pts[seg_cursor + 2], stroke_pts[seg_cursor + 3]
             dense = catmull_rom_centripetal_segment(p0, p1, p2, p3, samples_per_cell=6.0)
-            canvas.draw_polyline_subgrid(dense, thickness=brush)
+            canvas.draw_polyline_subgrid(dense, thickness=brush, color_idx=color_idx)
             seg_cursor += 1
 
     def _preview_tail() -> None:
@@ -245,37 +350,39 @@ def _main(stdscr) -> None:
         if len(stroke_pts) >= 2:
             a = stroke_pts[-2]
             b = stroke_pts[-1]
-            canvas.draw_polyline_subgrid([a, b], thickness=brush)
+            canvas.draw_polyline_subgrid([a, b], thickness=brush, color_idx=color_idx)
 
     def _redraw_from_history() -> None:
         canvas.clear()
-        for pts, th in strokes:
+        for pts, th, col in strokes:
             if not pts:
                 continue
             if len(pts) <= 2:
                 dense = pts
             else:
                 dense = catmull_rom_centripetal(pts, samples_per_cell=6.0)
-            canvas.draw_polyline_subgrid(dense, thickness=th)
+            canvas.draw_polyline_subgrid(dense, thickness=th, color_idx=col)
 
-    def render():
-        # Draw current canvas
-        stdscr.erase()
-        canvas.render_to_curses(stdscr)
-        # Optional: hint line
+    def render(full: bool = False):
+        # Draw canvas (incremental by default; full=true for resize/clear/undo)
+        canvas.render_to_curses(stdscr, PAIRS, full=full)
+        # Hint/debug overlay (draw after canvas so it stays on top)
+        COLORS_HINT = ["black","red","green","yellow","blue","magenta","cyan","white"]
         hint = (
-            f"draw: drag to draw  |  c: clear  |  q: quit  |  s: save png  |  S: save to dir  |  Ctrl+Z: undo  |  mouse:{mouse_hint}  |  d: debug {'on' if debug_mode else 'off'}  |  "
+            f"draw: drag  |  c: clear  |  q: quit  |  s/S: save  |  Ctrl+Z: undo  |  1-8: color={COLORS_HINT[color_idx]}  |  mouse:{mouse_hint}  |  d: debug {'on' if debug_mode else 'off'}  |  "
             f"Shift+Wheel: brush={brush}"
         )
         try:
+            stdscr.move(0, 0); stdscr.clrtoeol()
             stdscr.addstr(0, 0, hint[: max(0, width - 1)])
+            stdscr.move(1, 0); stdscr.clrtoeol()
             if debug_mode and debug_line:
                 stdscr.addstr(1, 0, debug_line[: max(0, width - 1)])
         except Exception:
             pass
         stdscr.refresh()
 
-    render()
+    render(full=True)
 
     try:
         while True:
@@ -288,7 +395,7 @@ def _main(stdscr) -> None:
             if ch == curses.KEY_RESIZE:
                 height, width = stdscr.getmaxyx()
                 canvas.resize_preserve(width, height)
-                render()
+                render(full=True)
                 continue
 
             # Ctrl+Z: undo last stroke (or cancel current stroke)
@@ -300,7 +407,7 @@ def _main(stdscr) -> None:
                 elif strokes:
                     strokes.pop()
                 _redraw_from_history()
-                render()
+                render(full=True)
                 continue
 
             if ch == ord("q") or ch == ord("Q") or ch == 3:
@@ -311,12 +418,19 @@ def _main(stdscr) -> None:
                 strokes.clear()
                 stroke_pts.clear()
                 seg_cursor = 0
-                render()
+                render(full=True)
                 continue
 
             if ch == ord("d") or ch == ord("D"):
                 debug_mode = not debug_mode
                 render()
+                continue
+
+            # Color selection: 1..8 map to 8 palette colors
+            if ch in (ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7'), ord('8')):
+                color_idx = ch - ord('1')
+                debug_line = f"color -> {color_idx+1}"
+                render()  # only overlay changes
                 continue
 
             # Save current canvas to PNG (default dir if configured)
@@ -331,8 +445,9 @@ def _main(stdscr) -> None:
                 path = os.path.join(base, filename)
                 scale = 3
                 try:
-                    canvas.export_png(path, scale=scale)
-                    debug_line = f"Saved {os.path.abspath(path)} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
+                    canvas.export_png(path, scale=scale, invert_bw=export_invert_bw)
+                    note = " (invert BW)" if export_invert_bw else ""
+                    debug_line = f"Saved {os.path.abspath(path)} ({canvas.sub_width*scale}x{canvas.sub_height*scale}){note}"
                 except Exception as e:
                     debug_line = f"Save failed: {e}"
                 render()
@@ -390,14 +505,15 @@ def _main(stdscr) -> None:
                 path = os.path.join(dirpath, f"draw_{ts}.png")
                 scale = 3
                 try:
-                    canvas.export_png(path, scale=scale)
-                    debug_line = f"Saved {os.path.abspath(path)} ({canvas.sub_width*scale}x{canvas.sub_height*scale})"
+                    canvas.export_png(path, scale=scale, invert_bw=export_invert_bw)
+                    note = " (invert BW)" if export_invert_bw else ""
+                    debug_line = f"Saved {os.path.abspath(path)} ({canvas.sub_width*scale}x{canvas.sub_height*scale}){note}"
                     # Remember this directory as default (unless overridden by env var)
                     default_save_dir = dirpath
                     _remember_default_save_dir(dirpath)
                 except Exception as e:
                     debug_line = f"Save failed: {e}"
-                render()
+                render()  # overlay only
                 continue
 
 
@@ -463,11 +579,11 @@ def _main(stdscr) -> None:
                     elif len(stroke_pts) == 1:
                         stroke_pts.append((sx, sy))
                         dense = catmull_rom_centripetal(stroke_pts, samples_per_cell=6.0)
-                        canvas.draw_polyline_subgrid(dense, thickness=brush)
+                        canvas.draw_polyline_subgrid(dense, thickness=brush, color_idx=color_idx)
                         render()
                     # Finalize current stroke into history
                     if stroke_pts:
-                        strokes.append((list(stroke_pts), brush))
+                        strokes.append((list(stroke_pts), brush, color_idx))
                     drawing = False
                     stroke_pts.clear()
                     seg_cursor = 0
@@ -519,11 +635,11 @@ def _main(stdscr) -> None:
                     elif len(stroke_pts) == 1:
                         stroke_pts.append((sx, sy))
                         dense = catmull_rom_centripetal(stroke_pts, samples_per_cell=6.0)
-                        canvas.draw_polyline_subgrid(dense, thickness=brush)
+                        canvas.draw_polyline_subgrid(dense, thickness=brush, color_idx=color_idx)
                         render()
                     # Finalize current stroke into history
                     if stroke_pts:
-                        strokes.append((list(stroke_pts), brush))
+                        strokes.append((list(stroke_pts), brush, color_idx))
                     drawing = False
                     stroke_pts.clear()
                     seg_cursor = 0

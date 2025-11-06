@@ -7,6 +7,7 @@
 - 使用全局命令启动：`draw`
 - 鼠标拖动绘制平滑曲线
 - Shift + 鼠标滚轮：调整笔刷粗细
+- 画笔级颜色：按数字键 1–8 选择颜色（黑/红/绿/黄/蓝/洋红/青/白）
 - 按 `s`：导出 PNG 到当前目录
 - 按 `S`：导出 PNG 到选择的目录（支持 `~` 和环境变量）
 - 按 `Ctrl+Z`：撤销上一个笔画
@@ -49,6 +50,7 @@
 ## 快捷键
 - 鼠标拖动：绘制
 - Shift + 滚轮：调整笔刷粗细（1–8）
+- 1–8：选择画笔颜色（黑/红/绿/黄/蓝/洋红/青/白）
 - s：保存 PNG 到当前目录
 - S：保存 PNG 到选择的目录（输入路径；空 = 当前目录）
 - Ctrl+Z：撤销上一个笔画
@@ -61,8 +63,14 @@
 - 默认文件名：`draw_YYYYmmdd_HHMMSS.png`
 - 默认缩放：每子像素 3×。按 `s` 保存到当前目录；按 `S` 保存到你选择的目录
 - `S` 的输入提示支持 `~` 和环境变量；目标目录需已存在
+- PNG 导出为 RGB，保留每个笔画的颜色
 - 可通过环境变量配置默认保存目录：`DRAW_ITERM_SAVE_DIR`（例如：`export DRAW_ITERM_SAVE_DIR="$HOME/Pictures/Draw-In-ITerm"`）
 - 若未设置该环境变量，按 `S` 选择的目录会被记住，保存在 `~/.config/draw_iterm/config.json`
+
+- 可选：仅在导出 PNG 时对黑/白两色做反色，便于在白色背景下看清。
+  - 通过环境变量启用：`DRAW_ITERM_EXPORT_INVERT_BW=1`（或在 shell rc 中加入 `export DRAW_ITERM_EXPORT_INVERT_BW=1`）
+  - 或在配置文件 `~/.config/draw_iterm/config.json` 中设置：`{ "export_invert_bw": true }`
+  - 影响范围：仅导出 PNG 时生效，黑↔白互换；其他颜色不变；终端内渲染不受影响
 
 
 ## 提示
