@@ -61,6 +61,11 @@ class BrailleCanvas:
         self._cell_color: List[List[int]] = [[-1] * self.width for _ in range(self.height)]
         # Dirty rows to update on next render (optimize incremental drawing)
         self._dirty_rows: set[int] = set(range(self.height))
+        # Cache of round-brush stamp offsets per Chebyshev radius (computed lazily)
+        self._disc_cache: dict[int, List[Tuple[int, int]]] = {}
+        # Brush fullness bias: larger -> fuller/rounder disc, smaller -> leaner.
+        # ~0.35 clips the corners (round caps) while keeping small radii solid.
+        self._brush_bias: float = 0.35
 
 
     @property
@@ -163,10 +168,42 @@ class BrailleCanvas:
                     counts[ci] += 1
         self._cell_color[cell_y][cell_x] = (max(range(8), key=lambda i: counts[i]) if any(counts) else -1)
 
+    def set_brush_bias(self, bias: float) -> None:
+        """Set the round-brush fullness bias and invalidate the offset cache.
+        Clamped to a sane range so a bad config can't break rasterization.
+        """
+        try:
+            b = float(bias)
+        except (TypeError, ValueError):
+            return
+        b = max(-0.49, min(0.99, b))
+        if b != self._brush_bias:
+            self._brush_bias = b
+            self._disc_cache.clear()
+
+    def _disc_offsets(self, r: int) -> List[Tuple[int, int]]:
+        """Return (and cache) the (dx, dy) offsets forming a round brush of radius r.
+
+        Uses a Euclidean test with a small bias so corners are clipped (round cap)
+        while small radii stay filled enough not to look sparse. Subpixels are
+        roughly square on screen, so a circle in subpixel space reads as round.
+        """
+        cached = self._disc_cache.get(r)
+        if cached is not None:
+            return cached
+        offsets: List[Tuple[int, int]] = []
+        rr = (r + self._brush_bias) ** 2
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if dx * dx + dy * dy <= rr:
+                    offsets.append((dx, dy))
+        self._disc_cache[r] = offsets
+        return offsets
+
     def _paint_disc_subpixel(self, sx: int, sy: int, r: int, color_idx: int | None = None) -> None:
-        """Paint a small square disc (Chebyshev radius r) centered at (sx,sy).
+        """Paint a small round disc (radius r) centered at (sx,sy).
         If color_idx is provided, also records per-subpixel color; otherwise only bitmask.
-        r=0 draws a single subpixel; r=1 draws a 3x3; r=2 draws a 5x5.
+        r=0 draws a single subpixel; larger r draws a circular brush with round caps.
         """
         if r <= 0:
             if color_idx is None:
@@ -174,12 +211,12 @@ class BrailleCanvas:
             else:
                 self.set_subpixel_color(sx, sy, color_idx)
             return
-        for dy in range(-r, r + 1):
-            for dx in range(-r, r + 1):
-                if color_idx is None:
-                    self.set_subpixel(sx + dx, sy + dy)
-                else:
-                    self.set_subpixel_color(sx + dx, sy + dy, color_idx)
+        if color_idx is None:
+            for dx, dy in self._disc_offsets(r):
+                self.set_subpixel(sx + dx, sy + dy)
+        else:
+            for dx, dy in self._disc_offsets(r):
+                self.set_subpixel_color(sx + dx, sy + dy, color_idx)
 
     def draw_polyline_subgrid(self, pts: List[Tuple[float, float]], thickness: int = 1, color_idx: int = 0) -> None:
         """Draw a polyline in subpixel coordinates using a supercover line rasterization.

@@ -61,6 +61,14 @@ From repo root:
 - c: clear canvas
 - q: quit
 
+## Brush look
+- Strokes use a round brush, so thick lines have smooth edges and rounded caps.
+- Default thickness (1–8): set env `DRAW_ITERM_DEFAULT_BRUSH` (e.g. `export DRAW_ITERM_DEFAULT_BRUSH=3`), or `"default_brush": 3` in `~/.config/draw_iterm/config.json`. Shift+Wheel still adjusts it live.
+- Brush fullness: set env `DRAW_ITERM_BRUSH_BIAS` (or `"brush_bias"` in the config file). Range roughly -0.49 … 0.99.
+  - Lower (e.g. `0.0`) = leaner, more rounded corners
+  - Default `0.35` = balanced
+  - Higher (e.g. `0.9`) = fuller, closer to a square brush
+
 ## Export PNG
 - Image content is rendered from the internal 2×4 subpixel grid per terminal cell, then upscaled for clarity
 - Default filename: `draw_YYYYmmdd_HHMMSS.png`

@@ -320,11 +320,54 @@ def _main(stdscr) -> None:
         return False
 
 
+    def _load_default_brush() -> int | None:
+        # Default brush thickness (1..8). Env var overrides config file.
+        def _coerce(val) -> int | None:
+            try:
+                i = int(str(val).strip())
+            except (TypeError, ValueError):
+                return None
+            return i if 1 <= i <= 8 else None
+        i = _coerce(os.environ.get("DRAW_ITERM_DEFAULT_BRUSH", ""))
+        if i is not None:
+            return i
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            return _coerce(data.get("default_brush"))
+        except Exception:
+            return None
+
+    def _load_brush_bias() -> float | None:
+        # Brush fullness bias (float). Env var overrides config file.
+        def _coerce(val) -> float | None:
+            try:
+                return float(str(val).strip())
+            except (TypeError, ValueError):
+                return None
+        b = _coerce(os.environ.get("DRAW_ITERM_BRUSH_BIAS", ""))
+        if b is not None:
+            return b
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            return _coerce(data.get("brush_bias"))
+        except Exception:
+            return None
+
     default_save_dir = _load_default_save_dir()
     # Initialize brush color with env/config/heuristic
     color_idx = _load_default_color()
 
     export_invert_bw = _load_export_invert_bw()
+
+    # Apply optional brush defaults (size + fullness)
+    _b = _load_default_brush()
+    if _b is not None:
+        brush = _b
+    _bias = _load_brush_bias()
+    if _bias is not None:
+        canvas.set_brush_bias(_bias)
 
 
     strokes: List[Tuple[List[Tuple[float, float]], int, int]] = []  # history of (points, thickness, color_idx)
